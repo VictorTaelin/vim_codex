@@ -153,49 +153,53 @@ def write_response(response, stop):
         if vim.eval('getchar(0)') != '0':
             return
 
-        if USE_STREAM_FEATURE:
-            single_response = next(response)
-        else:
-            single_response = response
-        completion = single_response['choices'][0]['text']
-        if single_response['choices'][0]['finish_reason'] != None:
-            if stop == '\n':
-                completion += '\n'
-        row, col = vim.current.window.cursor
-        current_line = vim.current.buffer[row-1]
-        new_line = current_line[:col] + completion + current_line[col:]
-        if not USE_STREAM_FEATURE:
+        try:
+            if USE_STREAM_FEATURE:
+                single_response = next(response)
+            else:
+                single_response = response
+            completion = single_response['choices'][0]['text']
+            if single_response['choices'][0]['finish_reason'] != None:
+                if stop == '\n':
+                    completion += '\n'
+            row, col = vim.current.window.cursor
+            current_line = vim.current.buffer[row-1]
+            new_line = current_line[:col] + completion + current_line[col:]
+            if not USE_STREAM_FEATURE:
+                if new_line == '':
+                    new_line = new_line
+                elif new_line[-1] == '\n':
+                    new_line = new_line[:-1]
+            new_lines = new_line.split('\n')
+            new_lines.reverse()
+            if len(vim_buf) == row:
+                vim_buf.append('')
+
+            vim_buf[row-1] = None
+            cursor_pos_base = tuple(vim_win.cursor)
+            for row_i in range(len(new_lines)):
+                vim.current.buffer[row-1:row-1] = [new_lines[row_i]]
+
             if new_line == '':
-                new_line = new_line
-            elif new_line[-1] == '\n':
-                new_line = new_line[:-1]
-        new_lines = new_line.split('\n')
-        new_lines.reverse()
-        if len(vim_buf) == row:
-            vim_buf.append('')
-               
-        vim_buf[row-1] = None
-        cursor_pos_base = tuple(vim_win.cursor)
-        for row_i in range(len(new_lines)):
-            vim.current.buffer[row-1:row-1] = [new_lines[row_i]]
+                cursor_target_col = 0
+            elif new_line[-1] != '\n':
+                cursor_target_col = len(new_lines[0])
+            else:
+                cursor_target_col = 0
+            vim_win.cursor = (cursor_pos_base[0] + row_i, cursor_target_col)
 
-        if new_line == '':
-            cursor_target_col = 0
-        elif new_line[-1] != '\n':
-            cursor_target_col = len(new_lines[0])
-        else:
-            cursor_target_col = 0
-        vim_win.cursor = (cursor_pos_base[0] + row_i, cursor_target_col)
+            if not USE_STREAM_FEATURE:
+                break
 
-        if not USE_STREAM_FEATURE:
+            # Flush the vim buffer.
+            vim.command("redraw")
+            if USE_STREAM_FEATURE:
+                if single_response['choices'][0]['finish_reason'] != None:
+                    # delete_current_line_if_empty_and_stop_below_matches_stop_string(stop)
+                    delete_empty_inserted_lines_if_stop_matches_stop_string(stop)
+                    break
+        except StopIteration:
             break
 
-        # Flush the vim buffer.
-        vim.command("redraw")
-        if USE_STREAM_FEATURE:
-            if single_response['choices'][0]['finish_reason'] != None:
-                # delete_current_line_if_empty_and_stop_below_matches_stop_string(stop)
-                delete_empty_inserted_lines_if_stop_matches_stop_string(stop)
-                break
 
 
